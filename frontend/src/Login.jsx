@@ -23,9 +23,15 @@ export default function Login({ setUser }) {
       navigate("/dashboard");
     } catch (err) {
       setLoading(false);
-      setError(
-        err.response?.data?.message || "Invalid credentials. Please try again."
-      );
+      if (err.response?.status === 423) {
+        setError(err.response.data.message || "Account temporarily locked. Please try again later.");
+      } else if (err.response?.status === 401) {
+        setError(err.response.data.message || "Invalid email or password. Please check your credentials.");
+      } else if (err.code === 'ERR_NETWORK') {
+        setError("Cannot connect to server. Please check your internet connection.");
+      } else {
+        setError(err.response?.data?.message || "Login failed. Please try again later.");
+      }
     }
   };
 

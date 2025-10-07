@@ -40,12 +40,20 @@ export default function Navbar({ user, setUser }) {
       </div>
       <div className="flex items-center gap-4">
         {isLoggedIn ? (
-          <button
-            onClick={handleLogout}
-            className="bg-purple-600 text-white px-5 py-2 rounded-md font-semibold hover:bg-purple-700 transition"
-          >
-            Logout
-          </button>
+          <>
+            <Link 
+              to="/profile" 
+              className="text-gray-700 hover:text-purple-600 transition font-medium"
+            >
+              Profile
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="bg-purple-600 text-white px-5 py-2 rounded-md font-semibold hover:bg-purple-700 transition"
+            >
+              Logout
+            </button>
+          </>
         ) : (
           <Link to="/login" className="bg-purple-600 text-white px-5 py-2 rounded-md font-semibold hover:bg-purple-700 transition">Login</Link>
         )}

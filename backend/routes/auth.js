@@ -27,17 +27,18 @@ router.post('/login', validateRequest(loginValidation), async (req, res, next) =
         ip: req.ip,
         userAgent: req.get('User-Agent')
       });
-      return next(new AppError('Invalid credentials', 401));
+      return next(new AppError('Invalid email or password. Please check your credentials and try again.', 401));
     }
 
     // Check if account is locked
     if (user.lockUntil && user.lockUntil > Date.now()) {
+      const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / 60000);
       securityLogger.warn('Login attempt on locked account', { 
         email, 
         ip: req.ip,
         lockUntil: user.lockUntil
       });
-      return next(new AppError('Account temporarily locked. Please try again later.', 423));
+      return next(new AppError(`Account temporarily locked due to too many failed login attempts. Please try again in ${minutesLeft} minute(s).`, 423));
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -62,7 +63,12 @@ router.post('/login', validateRequest(loginValidation), async (req, res, next) =
         attempts: user.loginAttempts
       });
       
-      return next(new AppError('Invalid credentials', 401));
+      const remainingAttempts = config.security.maxLoginAttempts - user.loginAttempts;
+      if (remainingAttempts > 0) {
+        return next(new AppError(`Invalid email or password. You have ${remainingAttempts} attempt(s) remaining before account lockout.`, 401));
+      } else {
+        return next(new AppError('Invalid email or password. Your account has been temporarily locked due to too many failed attempts.', 401));
+      }
     }
 
     // Reset login attempts on successful login

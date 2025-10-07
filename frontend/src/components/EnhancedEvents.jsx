@@ -4,6 +4,8 @@ import api from "../api";
 import config from "../config/config";
 import { ErrorDisplay, LoadingSpinner, useApi } from "./ErrorHandling";
 import EventForm from "../components/EventForm";
+import { CardListSkeleton, EventDetailSkeleton } from "./LoadingSkeletons";
+import { ErrorToast } from "./ConfirmDialog";
 
 // Status badge component
 const StatusBadge = ({ status }) => {
@@ -42,6 +44,8 @@ const StatusBadge = ({ status }) => {
 // Event card component
 const EventCard = ({ event, user, onEdit, onStatusChange }) => {
   const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const [showErrorToast, setShowErrorToast] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const getUserRole = () => {
     return user?.events?.find(ev => 
@@ -83,6 +87,8 @@ const EventCard = ({ event, user, onEdit, onStatusChange }) => {
       setShowStatusMenu(false);
     } catch (error) {
       console.error('Failed to update status:', error);
+      setErrorMessage(error.response?.data?.message || 'Failed to update event status. Please try again.');
+      setShowErrorToast(true);
     }
   };
 
@@ -187,6 +193,14 @@ const EventCard = ({ event, user, onEdit, onStatusChange }) => {
           </svg>
         </Link>
       </div>
+
+      {/* Error Toast */}
+      {showErrorToast && (
+        <ErrorToast
+          message={errorMessage}
+          onClose={() => setShowErrorToast(false)}
+        />
+      )}
     </div>
   );
 };
@@ -232,7 +246,7 @@ export function EventList({ user }) {
         ...res.data.pagination
       }));
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to load events.");
+      setError(err.response?.data?.message || "Failed to load events. Please refresh the page.");
     } finally {
       setLoading(false);
     }
@@ -272,8 +286,11 @@ export function EventList({ user }) {
 
   if (loading) {
     return (
-      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
-        <LoadingSpinner size="lg" text="Loading events..." />
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 p-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-6 h-10 w-48 bg-gray-200 rounded animate-pulse" />
+          <CardListSkeleton count={6} />
+        </div>
       </div>
     );
   }
@@ -438,8 +455,8 @@ export function EventDetails() {
 
   if (loading) {
     return (
-      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
-        <LoadingSpinner size="lg" text="Loading event details..." />
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 p-8">
+        <EventDetailSkeleton />
       </div>
     );
   }

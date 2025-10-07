@@ -17,7 +17,7 @@ class ScheduledTasksService {
     }
 
     this.isRunning = true;
-    logger.info('Starting scheduled tasks service');
+    // logger.info('Starting scheduled tasks service'); // Commented for cleaner logs
 
     // Update event statuses every 5 minutes
     this.scheduleTask('updateEventStatuses', '*/5 * * * *', async () => {

@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import api from "./api";
+import { KanbanSkeleton } from "./components/LoadingSkeletons";
+import { ConfirmDialog, SuccessToast, ErrorToast } from "./components/ConfirmDialog";
 
 const columns = [
   { key: "todo", label: "To Do", color: "bg-purple-100" },
@@ -269,6 +271,17 @@ export default function Taskboard({ eventId: propEventId, user }) {
   const [addingTask, setAddingTask] = useState(false);
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  
+  // Confirmation dialog state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  
+  // Toast notifications
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [showErrorToast, setShowErrorToast] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   // Use propEventId if provided, otherwise use the last event the user is assigned to
   const eventId = propEventId || (user?.events && user.events.length > 0 ? 
@@ -320,7 +333,7 @@ export default function Taskboard({ eventId: propEventId, user }) {
         const res = await api.get(`/tasks/${eventId}`);
         setTasks(res.data);
       } catch (err) {
-        setError(err.response?.data?.message || "Failed to load tasks.");
+        setError(err.response?.data?.message || "Failed to load tasks. Please refresh the page.");
       } finally {
         setLoading(false);
       }
@@ -338,20 +351,28 @@ export default function Taskboard({ eventId: propEventId, user }) {
       setTasks([...tasks, res.data.task]);
       setShowModal(false);
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to add task.");
+      setError(err.response?.data?.message || "Failed to create task. Please try again.");
     } finally {
       setAddingTask(false);
     }
   };
 
-  const handleDeleteTask = async (taskId) => {
-    if (!window.confirm('Are you sure you want to delete this task?')) return;
+  const handleDeleteTask = async () => {
+    if (!taskToDelete) return;
     
+    setDeleting(true);
     try {
-      await api.delete(`/tasks/${taskId}`);
-      setTasks(tasks.filter(task => task._id !== taskId));
+      await api.delete(`/tasks/${taskToDelete._id}`);
+      setTasks(tasks.filter(task => task._id !== taskToDelete._id));
+      setShowDeleteConfirm(false);
+      setTaskToDelete(null);
+      setSuccessMessage("Task deleted successfully");
+      setShowSuccessToast(true);
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to delete task.");
+      setErrorMessage(err.response?.data?.message || "Failed to delete task. Please try again.");
+      setShowErrorToast(true);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -360,7 +381,7 @@ export default function Taskboard({ eventId: propEventId, user }) {
       const res = await api.put(`/tasks/${taskId}`, updatedData);
       setTasks(tasks.map(task => task._id === taskId ? res.data.task : task));
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to update task.");
+      setError(err.response?.data?.message || "Failed to update task. Please try again.");
     }
   };
 
@@ -403,7 +424,7 @@ export default function Taskboard({ eventId: propEventId, user }) {
           loadingUsers={loadingUsers}
         />
         {loading ? (
-          <div className="text-purple-700 text-center py-8 font-bold">Loading tasks...</div>
+          <KanbanSkeleton />
         ) : error ? (
           <div className="text-red-600 text-center py-8 font-semibold">{error}</div>
         ) : (
@@ -445,7 +466,10 @@ export default function Taskboard({ eventId: propEventId, user }) {
                           </button>
                           <button 
                             className="px-4 py-1.5 rounded bg-red-100 text-red-600 font-semibold text-sm hover:bg-red-200 transition"
-                            onClick={() => handleDeleteTask(task._id)}
+                            onClick={() => {
+                              setTaskToDelete(task);
+                              setShowDeleteConfirm(true);
+                            }}
                           >
                             Delete
                           </button>
@@ -457,6 +481,34 @@ export default function Taskboard({ eventId: propEventId, user }) {
             ))}
           </div>
         )}
+        
+        {/* Delete Confirmation Dialog */}
+        <ConfirmDialog
+          open={showDeleteConfirm}
+          onClose={() => {
+            setShowDeleteConfirm(false);
+            setTaskToDelete(null);
+          }}
+          onConfirm={handleDeleteTask}
+          title="Delete Task"
+          message={`Are you sure you want to delete "${taskToDelete?.title}"? This action cannot be undone.`}
+          type="danger"
+          loading={deleting}
+        />
+        
+        {/* Success Toast */}
+        <SuccessToast
+          show={showSuccessToast}
+          message={successMessage}
+          onClose={() => setShowSuccessToast(false)}
+        />
+        
+        {/* Error Toast */}
+        <ErrorToast
+          show={showErrorToast}
+          message={errorMessage}
+          onClose={() => setShowErrorToast(false)}
+        />
       </div>
     </div>
   );

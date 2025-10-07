@@ -11,6 +11,40 @@ const config = require('../config/config');
 const { logger } = require('../utils/logger');
 const { AppError } = require('../middleware/errorHandler');
 const scheduledTasksService = require('../services/scheduledTasks');
+const { deleteUserWithRelatedData } = require('../utils/transactions');
+
+// GET /api/admin/roles - Get available roles and their labels (public for authenticated users)
+router.get('/roles', auth, async (req, res) => {
+  try {
+    // Role labels for display
+    const roleLabels = {
+      [ROLES.VOLUNTEER]: 'Volunteer',
+      [ROLES.TEAM_MEMBER]: 'Team Member',
+      [ROLES.EVENT_COORDINATOR]: 'Event Coordinator',
+      [ROLES.TE_HEAD]: 'Technical Head',
+      [ROLES.BE_HEAD]: 'Backend Head',
+      [ROLES.ADMIN]: 'Administrator'
+    };
+
+    // Create available roles array ordered by hierarchy
+    const availableRoles = [
+      { value: ROLES.VOLUNTEER, label: roleLabels[ROLES.VOLUNTEER] },
+      { value: ROLES.TEAM_MEMBER, label: roleLabels[ROLES.TEAM_MEMBER] },
+      { value: ROLES.EVENT_COORDINATOR, label: roleLabels[ROLES.EVENT_COORDINATOR] },
+      { value: ROLES.TE_HEAD, label: roleLabels[ROLES.TE_HEAD] },
+      { value: ROLES.BE_HEAD, label: roleLabels[ROLES.BE_HEAD] },
+      { value: ROLES.ADMIN, label: roleLabels[ROLES.ADMIN] }
+    ];
+
+    res.json({
+      roles: ROLES,
+      roleLabels,
+      availableRoles
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch roles' });
+  }
+});
 
 // GET /api/admin/dashboard - Get admin dashboard statistics
 router.get('/dashboard', auth, requireRole.requirePermission(PERMISSIONS.SYSTEM_ADMIN), async (req, res) => {
@@ -584,30 +618,13 @@ router.delete('/users/:id', auth, requireRole.requirePermission(PERMISSIONS.SYST
 
     const user = await User.findById(id);
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: 'User not found. They may have already been deleted.' });
     }
 
-    // Remove user from all events
-    await Event.updateMany(
-      { 'users.userId': id },
-      { $pull: { users: { userId: id } } }
-    );
+    // Delete user and cleanup related data atomically using transaction
+    const result = await deleteUserWithRelatedData(id, req.user);
 
-    // Delete user's tasks
-    await Task.deleteMany({ assignedTo: id });
-
-    // Delete the user
-    await User.findByIdAndDelete(id);
-
-    // Log the action
-    logger.info('Admin deleted user', {
-      adminId: req.user.id,
-      deletedUserId: id,
-      deletedUserEmail: user.email,
-      ip: req.ip
-    });
-
-    res.json({ message: 'User deleted successfully' });
+    res.json(result);
   } catch (err) {
     next(err);
   }

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import api from "../api";
 import config from "../config/config";
 import { ErrorDisplay, LoadingSpinner, useApi } from "../components/ErrorHandling";
+import { ErrorToast, SuccessToast } from "./ConfirmDialog";
 
 // Stats Card Component
 const StatsCard = ({ title, value, icon, trend, color = "purple" }) => {
@@ -148,6 +149,12 @@ export default function SystemAdmin() {
   const [systemTasks, setSystemTasks] = useState([]);
   const [executingTask, setExecutingTask] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Toast notifications
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [showErrorToast, setShowErrorToast] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const { loading, error, callApi } = useApi();
 
   useEffect(() => {
@@ -202,6 +209,8 @@ export default function SystemAdmin() {
       ]);
     } catch (err) {
       console.error('Failed to fetch system data:', err);
+      setErrorMessage(err.response?.data?.message || 'Failed to load system data. Please refresh the page.');
+      setShowErrorToast(true);
     }
   };
 
@@ -214,10 +223,14 @@ export default function SystemAdmin() {
   const executeTask = async (taskId) => {
     setExecutingTask(taskId);
     try {
-      await callApi(api.post, `/admin/system/tasks/${taskId}/execute`);
+      const response = await callApi(api.post, `/admin/system/tasks/${taskId}/execute`);
       await fetchSystemData(); // Refresh data after task execution
+      setSuccessMessage(response?.data?.message || 'Task executed successfully');
+      setShowSuccessToast(true);
     } catch (err) {
       console.error('Failed to execute task:', err);
+      setErrorMessage(err.response?.data?.message || 'Failed to execute task. Please try again.');
+      setShowErrorToast(true);
     } finally {
       setExecutingTask(null);
     }
@@ -413,6 +426,22 @@ export default function SystemAdmin() {
           </div>
         </div>
       </div>
+
+      {/* Success Toast */}
+      {showSuccessToast && (
+        <SuccessToast
+          message={successMessage}
+          onClose={() => setShowSuccessToast(false)}
+        />
+      )}
+
+      {/* Error Toast */}
+      {showErrorToast && (
+        <ErrorToast
+          message={errorMessage}
+          onClose={() => setShowErrorToast(false)}
+        />
+      )}
     </div>
   );
 }

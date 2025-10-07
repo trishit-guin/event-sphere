@@ -13,16 +13,13 @@ const requiredEnvVars = ['MONGO_URI', 'JWT_SECRET'];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
 if (missingVars.length > 0) {
-  logger.error('Missing required environment variables:', missingVars.join(', '));
   console.error('❌ Missing required environment variables:', missingVars.join(', '));
-  console.error('Please check your .env file and ensure all required variables are set.');
   process.exit(1);
 }
 
 // MongoDB connection
 mongoose.connect(config.database.mongoUri, config.database.options)
 .then(() => {
-  logger.info('MongoDB connected successfully');
   console.log('✅ MongoDB connected');
   
   // Start scheduled tasks after database connection
@@ -31,7 +28,6 @@ mongoose.connect(config.database.mongoUri, config.database.options)
   }, 2000); // Wait 2 seconds for everything to initialize
 })
 .catch(err => {
-  logger.error('MongoDB connection error:', err);
   console.error('❌ MongoDB connection error:', err);
   process.exit(1);
 });
@@ -66,7 +62,7 @@ app.use(cors(config.cors));
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'jade');
 
-app.use(morganLogger('dev'));
+// app.use(morganLogger('dev')); // Disabled for cleaner logs
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
@@ -107,19 +103,17 @@ app.use(errorHandler);
 
 // Graceful shutdown handling
 process.on('SIGINT', () => {
-  logger.info('Received SIGINT, shutting down gracefully');
+  console.log('🛑 Shutting down gracefully');
   scheduledTasksService.stop();
   mongoose.connection.close(() => {
-    logger.info('MongoDB connection closed');
     process.exit(0);
   });
 });
 
 process.on('SIGTERM', () => {
-  logger.info('Received SIGTERM, shutting down gracefully');
+  console.log('🛑 Shutting down gracefully');
   scheduledTasksService.stop();
   mongoose.connection.close(() => {
-    logger.info('MongoDB connection closed');
     process.exit(0);
   });
 });

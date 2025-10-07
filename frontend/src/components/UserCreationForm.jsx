@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import api from "../api";
 import config from "../config/config";
 import { ErrorDisplay, LoadingSpinner } from "./ErrorHandling";
+import { ROLES, getAvailableRoles, fetchRolesFromAPI } from "../constants/roles";
 
 export default function UserCreationForm({ onSuccess, onCancel }) {
   const [formData, setFormData] = useState({
@@ -14,16 +15,24 @@ export default function UserCreationForm({ onSuccess, onCancel }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [passwordValidation, setPasswordValidation] = useState({});
+  const [availableRoles, setAvailableRoles] = useState([]);
+  const [rolesLoading, setRolesLoading] = useState(true);
 
-  // Available roles for admin to assign
-  const availableRoles = [
-    { value: "volunteer", label: "Volunteer" },
-    { value: "event_coordinator", label: "Event Coordinator" },
-    { value: "team_member", label: "Team Member" },
-    { value: "te_head", label: "Technical Head" },
-    { value: "be_head", label: "Backend Head" },
-    { value: "admin", label: "Administrator" }
-  ];
+  // Fetch roles from API on component mount
+  useEffect(() => {
+    const loadRoles = async () => {
+      try {
+        setRolesLoading(true);
+        const rolesData = await fetchRolesFromAPI();
+        setAvailableRoles(rolesData.availableRoles);
+      } catch (err) {
+        console.error('Failed to load roles:', err);
+      } finally {
+        setRolesLoading(false);
+      }
+    };
+    loadRoles();
+  }, []);
 
   // Password validation function
   const validatePassword = (password) => {
@@ -90,7 +99,7 @@ export default function UserCreationForm({ onSuccess, onCancel }) {
         onSuccess(res.data.user);
       }
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to create user");
+      setError(err.response?.data?.message || "Failed to create user. Please check the form and try again.");
     } finally {
       setLoading(false);
     }

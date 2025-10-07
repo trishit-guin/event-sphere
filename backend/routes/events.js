@@ -14,6 +14,7 @@ const {
   validateStatusTransition, 
   canModifyEventDates 
 } = require('../utils/eventUtils');
+const { deleteEventWithRelatedData } = require('../utils/transactions');
 
 // Validation rules for event creation
 const createEventValidation = {
@@ -234,7 +235,7 @@ router.put('/:id', auth, requireRole.requirePermission(PERMISSIONS.EDIT_EVENTS),
         return next(new AppError('Cannot modify event dates at this time', 403));
       }
 
-      const validatedDates = validateEventDates(startDate, endDate);
+      const validatedDates = validateEventDates(startDate, endDate, true, event.startDate);
       updateData.startDate = validatedDates.startDate;
       updateData.endDate = validatedDates.endDate;
 
@@ -442,31 +443,10 @@ router.delete('/:id', auth, requireRole.requirePermission(PERMISSIONS.DELETE_EVE
       }
     }
 
-    // Remove event from all users
-    const User = require('../models/User');
-    await User.updateMany(
-      { 'events.eventId': event._id },
-      { $pull: { events: { eventId: event._id } } }
-    );
+    // Delete event and all related data atomically using transaction
+    const result = await deleteEventWithRelatedData(event._id, req.user);
 
-    // Delete related tasks
-    const Task = require('../models/Task');
-    await Task.deleteMany({ eventId: event._id });
-
-    // Delete related archive links
-    const ArchiveLink = require('../models/ArchiveLink');
-    await ArchiveLink.deleteMany({ eventId: event._id });
-
-    // Delete the event
-    await Event.findByIdAndDelete(req.params.id);
-
-    logger.info('Event deleted', {
-      eventId: event._id,
-      title: event.title,
-      deletedBy: req.user.userId
-    });
-
-    res.json({ message: 'Event and all related data deleted successfully' });
+    res.json(result);
   } catch (err) {
     next(err);
   }

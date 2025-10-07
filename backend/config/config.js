@@ -47,15 +47,6 @@ module.exports = {
     whitelistedIPs: process.env.WHITELISTED_IPS ? process.env.WHITELISTED_IPS.split(',') : []
   },
 
-  // File upload configuration
-  upload: {
-    maxFileSize: parseInt(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024, // 5MB
-    allowedMimeTypes: process.env.ALLOWED_MIME_TYPES 
-      ? process.env.ALLOWED_MIME_TYPES.split(',')
-      : ['image/jpeg', 'image/png', 'image/gif', 'application/pdf'],
-    uploadPath: process.env.UPLOAD_PATH || './uploads'
-  },
-
   // Email configuration (for future use)
   email: {
     host: process.env.EMAIL_HOST || 'smtp.gmail.com',

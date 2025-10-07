@@ -70,7 +70,7 @@ async function createFirstAdmin() {
 
   console.log('First admin user and dummy event created successfully!');
   console.log('Admin email:', user.email);
-  console.log('Admin password: 123456');
+  console.log('Admin password: [Set to default - please change after first login]');
   console.log('Event ID:', dummyEvent._id);
   
   } catch (error) {

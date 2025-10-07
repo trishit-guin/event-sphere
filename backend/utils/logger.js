@@ -8,6 +8,63 @@ if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
 
+// Sensitive field names to sanitize (case-insensitive matching)
+const SENSITIVE_FIELDS = [
+  'password',
+  'confirmPassword',
+  'oldPassword',
+  'newPassword',
+  'currentPassword',
+  'token',
+  'accessToken',
+  'refreshToken',
+  'authToken',
+  'apiKey',
+  'api_key',
+  'secret',
+  'secretKey',
+  'privateKey',
+  'jwt',
+  'authorization',
+  'cookie',
+  'session'
+];
+
+/**
+ * Sanitize an object by removing or masking sensitive fields
+ * @param {Object} obj - Object to sanitize
+ * @param {string} mask - Replacement text for sensitive values
+ * @returns {Object} Sanitized copy of the object
+ */
+const sanitizeObject = (obj, mask = '[HIDDEN]') => {
+  if (!obj || typeof obj !== 'object') return obj;
+  
+  // Handle arrays
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeObject(item, mask));
+  }
+  
+  // Handle objects
+  const sanitized = { ...obj };
+  
+  for (const key in sanitized) {
+    // Check if key matches any sensitive field (case-insensitive)
+    const keyLower = key.toLowerCase();
+    const isSensitive = SENSITIVE_FIELDS.some(field => 
+      keyLower.includes(field.toLowerCase())
+    );
+    
+    if (isSensitive) {
+      sanitized[key] = mask;
+    } else if (typeof sanitized[key] === 'object' && sanitized[key] !== null) {
+      // Recursively sanitize nested objects
+      sanitized[key] = sanitizeObject(sanitized[key], mask);
+    }
+  }
+  
+  return sanitized;
+};
+
 // Define log format
 const logFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
@@ -49,43 +106,41 @@ const logger = winston.createLogger({
       maxFiles: 5
     }),
     
-    // Write all logs to console in development
+    // Minimal console output in development
     ...(process.env.NODE_ENV !== 'production' ? [
       new winston.transports.Console({
-        format: winston.format.combine(
-          winston.format.colorize(),
-          winston.format.simple()
-        )
+        format: winston.format.printf(({ level, message }) => {
+          // Only show errors and important messages, not info logs
+          if (level === 'error') {
+            return `ERROR: ${message}`;
+          }
+          return null; // Don't show info logs to console
+        })
       })
     ] : [])
   ]
 });
 
-// Request logging middleware
+// Simple request logging middleware
 const requestLogger = (req, res, next) => {
-  const startTime = Date.now();
-  
-  // Log request
-  logger.info('Incoming request', {
-    method: req.method,
-    url: req.url,
-    ip: req.ip,
-    userAgent: req.get('User-Agent'),
-    userId: req.user?.id
-  });
-  
   // Log response when request completes
   const originalSend = res.send;
   res.send = function(data) {
-    const duration = Date.now() - startTime;
+    // Extract request data (body/query params) - FILTER OUT SENSITIVE DATA
+    // Note: We intentionally do NOT log headers (which contain Authorization tokens)
+    let requestData = '-';
     
-    logger.info('Request completed', {
-      method: req.method,
-      url: req.url,
-      statusCode: res.statusCode,
-      duration: `${duration}ms`,
-      userId: req.user?.id
-    });
+    if (req.method === 'GET' && Object.keys(req.query).length > 0) {
+      const sanitizedQuery = sanitizeObject(req.query);
+      requestData = JSON.stringify(sanitizedQuery);
+    } else if (req.method !== 'GET' && Object.keys(req.body).length > 0) {
+      // Sanitize request body to remove all sensitive fields
+      const sanitizedBody = sanitizeObject(req.body);
+      requestData = JSON.stringify(sanitizedBody);
+    }
+    
+    // Clean log format: HIT: 'path' 'data' 'response code'
+    console.log(`HIT: Path:'${req.path}' Data:'${requestData}' Status Code:'${res.statusCode}'`);
     
     originalSend.call(this, data);
   };
@@ -141,5 +196,6 @@ const securityLogger = {
 module.exports = {
   logger,
   requestLogger,
-  securityLogger
+  securityLogger,
+  sanitizeObject
 };

@@ -29,18 +29,6 @@ const config = {
     toastDuration: 5000
   },
 
-  // File Upload Configuration
-  upload: {
-    maxFileSize: parseInt(import.meta.env.VITE_MAX_FILE_UPLOAD_SIZE) || 5 * 1024 * 1024, // 5MB
-    supportedTypes: import.meta.env.VITE_SUPPORTED_FILE_TYPES?.split(',') || [
-      'image/jpeg', 
-      'image/png', 
-      'image/gif', 
-      'application/pdf'
-    ],
-    maxFiles: 10
-  },
-
   // Feature Flags
   features: {
     debugMode: import.meta.env.VITE_ENABLE_DEBUG_MODE === 'true',

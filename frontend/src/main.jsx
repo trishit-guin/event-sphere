@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, useParams, Navigate } from 'react-router-
 import './index.css'
 import App from './App.jsx'
 import Login from './Login.jsx'
+import Profile from './Profile.jsx'
 import Taskboard from './Taskboard.jsx'
 import Archive from './Archive.jsx'
 import Dashboard from './Dashboard.jsx'
@@ -172,6 +173,14 @@ function MainApp() {
       <Routes>
         <Route path="/" element={<App />} />
         <Route path="/login" element={<Login setUser={setUser} />} />
+        <Route 
+          path="/profile" 
+          element={
+            <ProtectedRoute user={user} setUser={setUser}>
+              <Profile user={user} setUser={setUser} />
+            </ProtectedRoute>
+          } 
+        />
         <Route 
           path="/taskboard" 
           element={

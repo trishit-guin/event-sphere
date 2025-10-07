@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import config from '../config/config';
 import { ErrorDisplay, LoadingSpinner, useApi } from './ErrorHandling';
+import { ErrorToast } from './ConfirmDialog';
 
 const EventForm = ({ event = null, onSuccess, onCancel }) => {
   const [formData, setFormData] = useState({
@@ -18,6 +19,10 @@ const EventForm = ({ event = null, onSuccess, onCancel }) => {
 
   const { loading, error, callApi, clearError } = useApi();
   const isEditing = !!event;
+  
+  // Validation error toast
+  const [showValidationError, setShowValidationError] = useState(false);
+  const [validationMessage, setValidationMessage] = useState('');
 
   const handleInputChange = (e) => {
     const { name, value, type } = e.target;
@@ -53,11 +58,15 @@ const EventForm = ({ event = null, onSuccess, onCancel }) => {
     const endDate = new Date(formData.endDate);
 
     if (startDate >= endDate) {
-      return alert('End date must be after start date');
+      setValidationMessage('End date must be after start date');
+      setShowValidationError(true);
+      return;
     }
 
     if (startDate < new Date()) {
-      return alert('Start date must be in the future');
+      setValidationMessage('Start date must be in the future');
+      setShowValidationError(true);
+      return;
     }
 
     try {
@@ -263,6 +272,14 @@ const EventForm = ({ event = null, onSuccess, onCancel }) => {
           </button>
         </div>
       </form>
+
+      {/* Validation Error Toast */}
+      {showValidationError && (
+        <ErrorToast
+          message={validationMessage}
+          onClose={() => setShowValidationError(false)}
+        />
+      )}
     </div>
   );
 };

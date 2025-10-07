@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import api from './api';
 import UserCreationForm from './components/UserCreationForm';
+import EventCreationForm from './components/EventCreationForm';
+import { DashboardSkeleton } from './components/LoadingSkeletons';
+import { ConfirmDialog, SuccessToast, ErrorToast } from './components/ConfirmDialog';
 
 export default function AdminDashboard() {
   const [dashboardData, setDashboardData] = useState(null);
@@ -14,6 +17,16 @@ export default function AdminDashboard() {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
   const [deletingUserId, setDeletingUserId] = useState(null);
+  
+  // Confirmation dialog state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
+  
+  // Toast notifications
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [showErrorToast, setShowErrorToast] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   // Form states
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '' });
@@ -42,18 +55,22 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteUser = async (userId) => {
-    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
-      return;
-    }
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
 
-    setDeletingUserId(userId);
+    setDeletingUserId(userToDelete._id);
     try {
-      await api.delete(`/admin/users/${userId}`);
-      setUsers(prev => prev.filter(user => user._id !== userId));
+      const response = await api.delete(`/admin/users/${userToDelete._id}`);
+      setUsers(prev => prev.filter(user => user._id !== userToDelete._id));
+      setShowDeleteConfirm(false);
+      setUserToDelete(null);
+      setSuccessMessage(response.data.message || 'User deleted successfully');
+      setShowSuccessToast(true);
     } catch (err) {
       console.error('Failed to delete user:', err);
-      alert('Failed to delete user. Please try again.');
+      const errorMsg = err.response?.data?.message || 'Failed to delete user. Please try again.';
+      setErrorMessage(errorMsg);
+      setShowErrorToast(true);
     } finally {
       setDeletingUserId(null);
     }
@@ -81,7 +98,9 @@ export default function AdminDashboard() {
       setEditingUser(null);
     } catch (err) {
       console.error('Failed to update user:', err);
-      alert('Failed to update user. Please try again.');
+      const errorMsg = err.response?.data?.message || 'Failed to update user. Please try again.';
+      setErrorMessage(errorMsg);
+      setShowErrorToast(true);
     }
   };
 
@@ -89,6 +108,20 @@ export default function AdminDashboard() {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
         <div className="text-purple-700 text-xl font-bold">Loading Admin Dashboard...</div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          <div className="mb-8">
+            <div className="h-10 w-64 bg-gray-200 rounded animate-pulse mb-2" />
+            <div className="h-5 w-96 bg-gray-200 rounded animate-pulse" />
+          </div>
+          <DashboardSkeleton />
+        </div>
       </div>
     );
   }
@@ -276,7 +309,10 @@ export default function AdminDashboard() {
                                 {editingUser?._id === user._id ? 'Editing' : 'Edit'}
                               </button>
                               <button 
-                                onClick={() => handleDeleteUser(user._id)}
+                                onClick={() => {
+                                  setUserToDelete(user);
+                                  setShowDeleteConfirm(true);
+                                }}
                                 disabled={deletingUserId === user._id || editingUser?._id === user._id}
                                 className="text-red-600 hover:text-red-900 disabled:opacity-50"
                               >
@@ -298,10 +334,26 @@ export default function AdminDashboard() {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Event Management</h3>
-              <button className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition font-medium">
+              <button 
+                onClick={() => setShowCreateEvent(true)}
+                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition font-medium"
+              >
                 Create New Event
               </button>
             </div>
+
+            {showCreateEvent && (
+              <div className="mb-6 p-6 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="text-lg font-semibold text-blue-900 mb-4">Create New Event</h4>
+                <EventCreationForm 
+                  onSuccess={(newEvent) => {
+                    setEvents(prev => [newEvent, ...prev]);
+                    setShowCreateEvent(false);
+                  }}
+                  onCancel={() => setShowCreateEvent(false)}
+                />
+              </div>
+            )}
             
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -357,6 +409,39 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+      {/* Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <ConfirmDialog
+          title="Delete User"
+          message={`Are you sure you want to delete ${userToDelete?.name}? This action cannot be undone and will remove all associations with events.`}
+          type="danger"
+          confirmText="Delete User"
+          cancelText="Cancel"
+          onConfirm={handleDeleteUser}
+          onCancel={() => {
+            setShowDeleteConfirm(false);
+            setUserToDelete(null);
+          }}
+          loading={deletingUserId === userToDelete?._id}
+        />
+      )}
+
+      {/* Success Toast */}
+      {showSuccessToast && (
+        <SuccessToast
+          message={successMessage}
+          onClose={() => setShowSuccessToast(false)}
+        />
+      )}
+
+      {/* Error Toast */}
+      {showErrorToast && (
+        <ErrorToast
+          message={errorMessage}
+          onClose={() => setShowErrorToast(false)}
+        />
+      )}
     </div>
   );
 } 

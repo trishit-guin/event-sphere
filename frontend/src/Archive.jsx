@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import api from "./api";
+import { ArchiveListSkeleton } from "./components/LoadingSkeletons";
+import { ConfirmDialog, SuccessToast, ErrorToast } from "./components/ConfirmDialog";
 
 function AddArchiveModal({ open, onClose, onAdd }) {
   const [title, setTitle] = useState("");
@@ -146,6 +148,17 @@ export default function Archive({ eventId: propEventId, user }) {
   const [showModal, setShowModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingLink, setEditingLink] = useState(null);
+  
+  // Confirmation dialog state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [linkToDelete, setLinkToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  
+  // Toast notifications
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [showErrorToast, setShowErrorToast] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   // Use propEventId if provided, otherwise use the last event the user is assigned to
   const eventId = propEventId || (user?.events && user.events.length > 0 ? 
@@ -201,14 +214,23 @@ export default function Archive({ eventId: propEventId, user }) {
     }
   };
 
-  const handleDeleteLink = async (linkId) => {
-    if (!window.confirm('Are you sure you want to delete this archive link?')) return;
+  const handleDeleteLink = async () => {
+    if (!linkToDelete) return;
     
+    setDeleting(true);
     try {
-      await api.delete(`/archive/${linkId}`);
-      setLinks(links.filter(link => link._id !== linkId));
+      const response = await api.delete(`/archive/${linkToDelete._id}`);
+      setLinks(links.filter(link => link._id !== linkToDelete._id));
+      setShowDeleteConfirm(false);
+      setLinkToDelete(null);
+      setSuccessMessage(response.data.message || 'Archive link deleted successfully');
+      setShowSuccessToast(true);
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to delete archive link.");
+      const errorMsg = err.response?.data?.message || "Failed to delete archive link.";
+      setErrorMessage(errorMsg);
+      setShowErrorToast(true);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -255,7 +277,7 @@ export default function Archive({ eventId: propEventId, user }) {
           link={editingLink}
         />
         {loading ? (
-          <div className="text-purple-700 text-center py-8 font-bold">Loading archive links...</div>
+          <ArchiveListSkeleton />
         ) : error ? (
           <div className="text-red-600 text-center py-8 font-semibold">{error}</div>
         ) : (
@@ -291,9 +313,13 @@ export default function Archive({ eventId: propEventId, user }) {
                   </button>
                   <button 
                     className="px-4 py-1.5 rounded bg-red-100 text-red-600 font-semibold text-sm hover:bg-red-200 transition"
-                    onClick={() => handleDeleteLink(link._id)}
+                    onClick={() => {
+                      setLinkToDelete(link);
+                      setShowDeleteConfirm(true);
+                    }}
+                    disabled={deleting}
                   >
-                    Delete
+                    {deleting && linkToDelete?._id === link._id ? 'Deleting...' : 'Delete'}
                   </button>
                 </div>
               </div>
@@ -301,6 +327,39 @@ export default function Archive({ eventId: propEventId, user }) {
           </div>
         )}
       </div>
+
+      {/* Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <ConfirmDialog
+          title="Delete Archive Link"
+          message={`Are you sure you want to delete "${linkToDelete?.title}"? This action cannot be undone.`}
+          type="danger"
+          confirmText="Delete Link"
+          cancelText="Cancel"
+          onConfirm={handleDeleteLink}
+          onCancel={() => {
+            setShowDeleteConfirm(false);
+            setLinkToDelete(null);
+          }}
+          loading={deleting}
+        />
+      )}
+
+      {/* Success Toast */}
+      {showSuccessToast && (
+        <SuccessToast
+          message={successMessage}
+          onClose={() => setShowSuccessToast(false)}
+        />
+      )}
+
+      {/* Error Toast */}
+      {showErrorToast && (
+        <ErrorToast
+          message={errorMessage}
+          onClose={() => setShowErrorToast(false)}
+        />
+      )}
     </div>
   );
 } 

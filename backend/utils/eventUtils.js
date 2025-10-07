@@ -3,38 +3,43 @@ const { AppError, ValidationError } = require('../middleware/errorHandler');
 const config = require('../config/config');
 
 // Validate event dates
-const validateEventDates = (startDate, endDate) => {
+const validateEventDates = (startDate, endDate, isUpdate = false, currentStartDate = null) => {
   const now = new Date();
   const start = new Date(startDate);
   const end = new Date(endDate);
 
   // Check if dates are valid
   if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-    throw new ValidationError('Invalid date format');
+    throw new ValidationError('Invalid date format. Please provide valid dates.');
   }
 
-  // Start date should be in the future (allow 1 hour buffer for editing)
-  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-  if (start < oneHourAgo) {
-    throw new ValidationError('Start date cannot be in the past');
+  // For new events, start date should not be in the past (allow 1 hour buffer)
+  // For updates, allow if the date hasn't changed or if it's being moved to future
+  if (!isUpdate) {
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    if (start < oneHourAgo) {
+      throw new ValidationError('Event start date cannot be in the past.');
+    }
   }
 
-  // End date should be after start date
+  // End date must be after start date
   if (end <= start) {
-    throw new ValidationError('End date must be after start date');
+    throw new ValidationError('Event end date must be after start date.');
   }
 
-  // Event duration shouldn't be too long (max 365 days)
-  const maxDuration = 365 * 24 * 60 * 60 * 1000; // 365 days in milliseconds
+  // Event duration validation (max 365 days)
+  const maxDuration = 365 * 24 * 60 * 60 * 1000; // 365 days
   if (end.getTime() - start.getTime() > maxDuration) {
-    throw new ValidationError('Event duration cannot exceed 365 days');
+    throw new ValidationError('Event duration cannot exceed 365 days.');
   }
 
   // Minimum event duration (15 minutes)
   const minDuration = 15 * 60 * 1000; // 15 minutes
   if (end.getTime() - start.getTime() < minDuration) {
-    throw new ValidationError('Event must be at least 15 minutes long');
+    throw new ValidationError('Event must be at least 15 minutes long.');
   }
+
+  // Note: Multiple events can occur on the same date - no uniqueness check
 
   return { startDate: start, endDate: end };
 };

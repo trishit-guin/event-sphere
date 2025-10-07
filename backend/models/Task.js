@@ -20,13 +20,7 @@ const taskSchema = new mongoose.Schema({
   estimatedHours: { type: Number },
   actualHours: { type: Number },
   viewLevel: [{ type: String }],
-  tags: [{ type: String }],
-  attachments: [{
-    filename: String,
-    path: String,
-    mimetype: String,
-    size: Number
-  }]
+  tags: [{ type: String }]
 }, {
   timestamps: true, // Adds createdAt and updatedAt automatically
   toJSON: { virtuals: true },
