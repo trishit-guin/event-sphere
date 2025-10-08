@@ -56,7 +56,21 @@ app.use(requestLogger);
 app.use(conditionalRateLimiter);
 
 // CORS configuration
-app.use(cors(config.cors));
+const allowedOrigins = ['https://event-sphere-omega.vercel.app','http://localhost:5173', 'http://localhost:3000', 'http://localhost:3001','https://event-sphere-omega.vercel.app/'];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Check if the incoming origin is in our whitelist
+    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+      // Allow the request
+      callback(null, true);
+    } else {
+      // Block the request
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+};
+app.use(cors(corsOptions));
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
