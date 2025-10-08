@@ -312,9 +312,12 @@ export default function Taskboard({ eventId: propEventId, user }) {
     setLoadingUsers(true);
     try {
       const res = await api.get('/users');
-      setUsers(res.data);
+      // API returns { users: [...], pagination: {...} }
+      setUsers(res.data.users || res.data);
+      console.log('Fetched users for tasks:', res.data.users || res.data);
     } catch (err) {
       console.error('Failed to fetch users:', err);
+      setUsers([]); // Set empty array on error
     } finally {
       setLoadingUsers(false);
     }

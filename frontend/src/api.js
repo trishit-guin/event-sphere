@@ -23,6 +23,14 @@ api.interceptors.request.use(
       requestConfig.metadata = { startTime: new Date() };
     }
     
+    // Log the actual request URL for debugging
+    console.log('API Request:', {
+      method: requestConfig.method?.toUpperCase(),
+      url: requestConfig.url,
+      baseURL: requestConfig.baseURL,
+      fullURL: `${requestConfig.baseURL}${requestConfig.url}`
+    });
+    
     return requestConfig;
   },
   (error) => Promise.reject(error)
@@ -40,6 +48,17 @@ api.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config;
+    
+    // Log API errors for debugging
+    console.error('API Error:', {
+      message: error.message,
+      code: error.code,
+      url: originalRequest?.url,
+      method: originalRequest?.method,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data
+    });
 
     // Handle 401 errors (unauthorized) - redirect to login
     if (error.response?.status === 401) {

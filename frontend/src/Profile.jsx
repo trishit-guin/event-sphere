@@ -28,20 +28,76 @@ export default function Profile({ user, setUser }) {
     }
   }, [user]);
 
+  const testConnection = async () => {
+    try {
+      console.log('Testing backend connection...');
+      const response = await api.get('/users/test');
+      console.log('Connection test successful:', response.data);
+      return true;
+    } catch (err) {
+      console.error('Connection test failed:', err);
+      return false;
+    }
+  };
+
   const handleProfileUpdate = async (e) => {
     e.preventDefault();
     setProfileLoading(true);
     setProfileMessage({ type: "", text: "" });
 
+    // Frontend validation
+    if (!name || name.trim().length === 0) {
+      setProfileMessage({ type: "error", text: "Name is required" });
+      setProfileLoading(false);
+      return;
+    }
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setProfileMessage({ type: "error", text: "Valid email is required" });
+      setProfileLoading(false);
+      return;
+    }
+
+    // Test connection first
+    const isConnected = await testConnection();
+    if (!isConnected) {
+      setProfileMessage({
+        type: "error",
+        text: "Cannot connect to server. Please ensure the backend is running on port 3000.",
+      });
+      setProfileLoading(false);
+      return;
+    }
+
     try {
+      console.log('Sending profile update request:', { name, email });
       const response = await api.put("/users/profile", { name, email });
+      console.log('Profile update response:', response.data);
       setUser(response.data.user);
       setProfileMessage({ type: "success", text: response.data.message });
       setIsEditingProfile(false);
     } catch (err) {
+      console.error('Profile update error:', err);
+      console.error('Error response data:', err.response?.data);
+      console.error('Error status:', err.response?.status);
+      console.error('Error code:', err.code);
+      console.error('Error message:', err.message);
+      
+      let errorMessage = "Failed to update profile";
+      
+      if (err.code === 'NETWORK_ERROR' || err.message.includes('Network Error')) {
+        errorMessage = "Cannot connect to server. Please check if the backend is running.";
+      } else if (err.response?.status) {
+        errorMessage = err.response?.data?.message || err.response?.data?.error || `Server error (${err.response.status})`;
+      } else if (err.code === 'ECONNREFUSED') {
+        errorMessage = "Connection refused. Backend server is not running.";
+      } else {
+        errorMessage = err.message || "Unknown error occurred";
+      }
+      
       setProfileMessage({
         type: "error",
-        text: err.response?.data?.message || "Failed to update profile",
+        text: errorMessage,
       });
     } finally {
       setProfileLoading(false);

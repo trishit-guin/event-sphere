@@ -33,23 +33,73 @@ export default function AdminDashboard() {
   const [newEvent, setNewEvent] = useState({ title: '', description: '', roles: [''] });
   const [assignUser, setAssignUser] = useState({ userId: '', role: '' });
 
+  // Helper function to get the latest role for a user
+  const getLatestRole = (user) => {
+    if (!user.events || user.events.length === 0) {
+      return 'No Role Assigned';
+    }
+    
+    // Sort events by creation date and get the most recent role
+    const sortedEvents = [...user.events].sort((a, b) => {
+      // If we have eventId objects with creation dates, use those for sorting
+      if (a.eventId?.createdAt && b.eventId?.createdAt) {
+        return new Date(b.eventId.createdAt) - new Date(a.eventId.createdAt);
+      }
+      // If no creation dates available, return the last role in the array
+      return user.events.indexOf(b) - user.events.indexOf(a);
+    });
+    
+    return sortedEvents[0].role || 'No Role Assigned';
+  };
+
   useEffect(() => {
     fetchDashboardData();
   }, []);
 
   const fetchDashboardData = async () => {
     try {
+      console.log('Fetching admin dashboard data...');
+      
       const [dashboardRes, usersRes, eventsRes] = await Promise.all([
-        api.get('/admin/dashboard'),
-        api.get('/admin/users'),
-        api.get('/admin/events')
+        api.get('/admin/dashboard').catch(err => {
+          console.error('Dashboard API error:', {
+            status: err.response?.status,
+            message: err.response?.data?.message || err.message,
+            url: '/admin/dashboard'
+          });
+          return { data: null }; // Return null data instead of failing completely
+        }),
+        api.get('/admin/users').catch(err => {
+          console.error('Users API error:', {
+            status: err.response?.status,
+            message: err.response?.data?.message || err.message,
+            url: '/admin/users'
+          });
+          return { data: { users: [] } }; // Return empty users array
+        }),
+        api.get('/admin/events').catch(err => {
+          console.error('Events API error:', {
+            status: err.response?.status,
+            message: err.response?.data?.message || err.message,
+            url: '/admin/events'
+          });
+          return { data: [] }; // Return empty events array
+        })
       ]);
+      
+      console.log('API responses:', {
+        dashboard: dashboardRes.data,
+        users: usersRes.data,
+        events: eventsRes.data
+      });
       
       setDashboardData(dashboardRes.data);
       setUsers(usersRes.data.users || usersRes.data); // Handle different response formats
       setEvents(eventsRes.data);
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
+      setErrorMessage('Failed to load admin dashboard. Please check your permissions and try refreshing.');
+      setShowErrorToast(true);
     } finally {
       setLoading(false);
     }
@@ -79,7 +129,8 @@ export default function AdminDashboard() {
   const handleEditUser = (user) => {
     setEditingUser({
       ...user,
-      originalEmail: user.email
+      originalEmail: user.email,
+      role: getLatestRole(user) // Set the latest role for editing
     });
   };
 
@@ -134,6 +185,17 @@ export default function AdminDashboard() {
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin Dashboard</h1>
             <p className="text-gray-600">Manage users, events, and monitor system statistics</p>
+            {showErrorToast && (
+              <div className="mt-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                <p>{errorMessage}</p>
+                <button 
+                  onClick={() => {setShowErrorToast(false); fetchDashboardData();}}
+                  className="mt-2 bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
           </div>
           <a 
             href="/admin/system"
@@ -164,19 +226,33 @@ export default function AdminDashboard() {
 
         {/* Tab Content */}
         {activeTab === 'overview' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Users</h3>
-              <p className="text-3xl font-bold text-purple-600">{users.length}</p>
+          <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Users</h3>
+                <p className="text-3xl font-bold text-purple-600">{users.length}</p>
+                {users.length === 0 && (
+                  <p className="text-sm text-gray-500 mt-1">No users found or access denied</p>
+                )}
+              </div>
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Events</h3>
+                <p className="text-3xl font-bold text-green-600">{events.length}</p>
+                {events.length === 0 && (
+                  <p className="text-sm text-gray-500 mt-1">No events found or access denied</p>
+                )}
+              </div>
             </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Events</h3>
-              <p className="text-3xl font-bold text-green-600">{events.length}</p>
-            </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">System Health</h3>
-              <p className="text-lg font-semibold text-green-600">Operational</p>
-            </div>
+            
+            {!dashboardData && users.length === 0 && events.length === 0 && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-yellow-800 mb-2">Limited Access</h3>
+                <p className="text-yellow-700">
+                  You may not have sufficient permissions to view all dashboard data. 
+                  Contact your system administrator if you believe this is an error.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -290,7 +366,7 @@ export default function AdminDashboard() {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                                {user.role?.replace('_', ' ').toUpperCase() || 'N/A'}
+                                {getLatestRole(user)?.replace('_', ' ').toUpperCase() || 'N/A'}
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -391,7 +467,7 @@ export default function AdminDashboard() {
                         {event.startDate ? new Date(event.startDate).toLocaleDateString() : 'Not set'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {event.currentParticipants || 0} / {event.maxParticipants || 'N/A'}
+                        {event.users?.length || 0} / {event.maxParticipants || 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <button className="text-purple-600 hover:text-purple-900 mr-3">

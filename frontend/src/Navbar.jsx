@@ -30,10 +30,7 @@ export default function Navbar({ user, setUser }) {
               <li><Link to="/admin" className="hover:text-purple-600 transition font-bold">Management</Link></li>
             )}
             {userIsAdmin && (
-              <>
-                <li><Link to="/admin/users" className="hover:text-purple-600 transition font-bold">User Admin</Link></li>
-                <li><Link to="/admin/system" className="hover:text-purple-600 transition font-bold">System</Link></li>
-              </>
+              <li><Link to="/admin/system" className="hover:text-purple-600 transition font-bold">System</Link></li>
             )}
           </ul>
         )}

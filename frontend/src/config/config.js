@@ -2,7 +2,7 @@
 const config = {
   // API Configuration
   api: {
-    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+    baseURL: (import.meta.env.VITE_API_URL || 'http://localhost:5000'),
     timeout: 30000, // 30 seconds
     retryAttempts: 3,
     retryDelay: 1000 // 1 second
@@ -80,6 +80,14 @@ const config = {
     displayFormat: 'MMM DD, YYYY',
     timeFormat: 'HH:mm',
     dateTimeFormat: 'MMM DD, YYYY HH:mm'
+  },
+
+  // Application limits (matching backend config)
+  limits: {
+    maxEventsPerUser: 50,
+    maxTasksPerEvent: 200,
+    maxArchiveLinksPerEvent: 100,
+    maxUsersPerEvent: 500
   }
 };
 

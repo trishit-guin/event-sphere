@@ -1,4 +1,5 @@
 // Configuration constants - centralized configuration management
+
 module.exports = {
   // Server configuration
   server: {
@@ -29,8 +30,8 @@ module.exports = {
 
   // CORS configuration
   cors: {
-    origin: process.env.NODE_ENV === 'production' 
-      ? (process.env.FRONTEND_URL || 'https://your-domain.com').split(',')
+    origin: process.env.NODE_ENV == 'production' 
+      ? (process.env.FRONTEND_URL || 'https://event-sphere-omega.vercel.app/').split(',')
       : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3001'],
     credentials: true,
     optionsSuccessStatus: 200,

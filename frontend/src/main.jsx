@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route, useParams, Navigate } from 'react-router-dom'
 import './index.css'
 import App from './App.jsx'
+// Debug utilities for development
+import './debug-api.js'
 import Login from './Login.jsx'
 import Profile from './Profile.jsx'
 import Taskboard from './Taskboard.jsx'
