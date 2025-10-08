@@ -122,13 +122,20 @@ router.get('/', auth, async (req, res, next) => {
       Event.countDocuments(filters)
     ]);
 
-    // Update statuses for retrieved events
+    // Update statuses for retrieved events and fix participant counts
     const updatedEvents = events.map(event => {
       const currentStatus = determineEventStatus(event);
       if (currentStatus !== event.status) {
         event.status = currentStatus;
         // Note: We're not saving here for performance, but this could be done in background
       }
+      
+      // Update currentParticipants to match actual users array length
+      const actualParticipants = event.users ? event.users.length : 0;
+      if (event.currentParticipants !== actualParticipants) {
+        event.currentParticipants = actualParticipants;
+      }
+      
       return event;
     });
 
@@ -164,6 +171,10 @@ router.get('/:id', auth, async (req, res, next) => {
 
     // Update and return current status
     event.status = determineEventStatus(event);
+
+    // Update currentParticipants to match actual users array length
+    const actualParticipants = event.users ? event.users.length : 0;
+    event.currentParticipants = actualParticipants;
 
     // Add additional computed fields
     event.isUpcoming = new Date(event.startDate) > new Date();

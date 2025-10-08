@@ -118,7 +118,7 @@ router.get('/users', auth, requireRole.requirePermission(PERMISSIONS.MANAGE_USER
   try {
     const users = await User.find()
       .select('-password')
-      .populate('events.eventId', 'title');
+      .populate('events.eventId', 'title createdAt');
     res.json(users);
   } catch (err) {
     res.status(500).json({ message: 'Server error' });
@@ -159,159 +159,77 @@ router.get('/archives', auth, requireRole.hasManagementRole, async (req, res) =>
   }
 });
 
-// GET /api/admin/system/tasks - Get scheduled task status
-router.get('/system/tasks', auth, requireRole.requirePermission(PERMISSIONS.SYSTEM_ADMIN), async (req, res, next) => {
+// GET /api/admin/system - Main system dashboard with essential metrics
+router.get('/system', auth, requireRole.requirePermission(PERMISSIONS.SYSTEM_ADMIN), async (req, res, next) => {
   try {
-    const taskStatus = scheduledTasksService.getTaskStatus();
-    
-    res.json({
-      message: 'Scheduled tasks status retrieved successfully',
-      ...taskStatus,
-      serverTime: new Date().toISOString(),
-      uptime: process.uptime()
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// POST /api/admin/system/tasks/:taskName/run - Manually run a scheduled task
-router.post('/system/tasks/:taskName/run', auth, requireRole.requirePermission(PERMISSIONS.SYSTEM_ADMIN), async (req, res, next) => {
-  try {
-    const { taskName } = req.params;
-    
-    await scheduledTasksService.runTask(taskName);
-    
-    logger.info('Manual task execution', {
-      taskName,
-      executedBy: req.user.userId,
-      timestamp: new Date().toISOString()
-    });
-
-    res.json({
-      message: `Task ${taskName} executed successfully`,
-      taskName,
-      executedAt: new Date().toISOString()
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// POST /api/admin/system/tasks/:taskId/execute - Alias for manual task execution
-router.post('/system/tasks/:taskId/execute', auth, requireRole.requirePermission(PERMISSIONS.SYSTEM_ADMIN), async (req, res, next) => {
-  try {
-    const { taskId } = req.params;
-    
-    // Map frontend task IDs to backend task names
-    const taskMapping = {
-      'update_event_status': 'updateEventStatus',
-      'cleanup_logs': 'cleanupLogs', 
-      'generate_reports': 'generateReports',
-      'backup_database': 'backupDatabase'
-    };
-
-    const taskName = taskMapping[taskId];
-    if (!taskName) {
-      return res.status(400).json({ message: `Unknown task ID: ${taskId}` });
-    }
-    
-    await scheduledTasksService.runTask(taskName);
-    
-    logger.info('Manual task execution via alias', {
-      taskId,
-      taskName,
-      executedBy: req.user.userId,
-      timestamp: new Date().toISOString()
-    });
-
-    res.json({
-      message: `Task ${taskName} executed successfully`,
-      taskId,
-      taskName,
-      executedAt: new Date().toISOString()
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// GET /api/admin/system/health - System health check
-router.get('/system/health', auth, requireRole.requirePermission(PERMISSIONS.SYSTEM_ADMIN), async (req, res, next) => {
-  try {
-    const mongoose = require('mongoose');
-    
-    // Check database connection
-    const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
-    
-    // Get memory usage
-    const memoryUsage = process.memoryUsage();
-    
-    // Check event status consistency
-    const { getEventsNeedingStatusUpdate } = require('../utils/eventUtils');
-    const { eventsToComplete, eventsToActivate } = await getEventsNeedingStatusUpdate();
-    
-    const health = {
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      database: {
-        status: dbStatus,
-        name: mongoose.connection.name || 'unknown'
-      },
-      memory: {
-        rss: Math.round(memoryUsage.rss / 1024 / 1024) + ' MB',
-        heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024) + ' MB',
-        heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024) + ' MB',
-        external: Math.round(memoryUsage.external / 1024 / 1024) + ' MB'
-      },
-      scheduledTasks: scheduledTasksService.getTaskStatus(),
-      eventStatusIssues: {
-        eventsNeedingCompletion: eventsToComplete.length,
-        eventsNeedingActivation: eventsToActivate.length
-      },
-      nodeVersion: process.version,
-      environment: config.server.nodeEnv
-    };
-
-    // Set status based on issues
-    if (dbStatus !== 'connected' || eventsToComplete.length > 10 || eventsToActivate.length > 10) {
-      health.status = 'degraded';
-    }
-
-    res.json(health);
-  } catch (err) {
-    next(err);
-  }
-});
-
-// GET /api/admin/system/activity - Recent system activities
-router.get('/system/activity', auth, requireRole.requirePermission(PERMISSIONS.SYSTEM_ADMIN), async (req, res, next) => {
-  try {
-    // Get recent activities from the last 24 hours
+    // Get recent activity timeframe (last 24 hours)
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     
+    // Fetch all required data
+    const [
+      totalUsers,
+      activeEvents,
+      taskStats,
+      totalDriveLinks,
+      recentActivity
+    ] = await Promise.all([
+      // 1. Total users
+      User.countDocuments(),
+      
+      // 2. Active events (status: 'active')
+      Event.countDocuments({ status: 'active' }),
+      
+      // 3. Task completion stats
+      Promise.all([
+        Task.countDocuments({ status: 'done' }), // completed tasks
+        Task.countDocuments() // total tasks
+      ]),
+      
+      // 4. Total drive links (ArchiveLink documents)
+      ArchiveLink.countDocuments(),
+      
+      // 5. Recent activity logs (last 24 hours)
+      Promise.all([
+        // Recent user logins
+        User.find({ 
+          lastLogin: { $gte: twentyFourHoursAgo } 
+        }).select('name email lastLogin').limit(5),
+        
+        // Recent events created
+        Event.find({ 
+          createdAt: { $gte: twentyFourHoursAgo } 
+        }).select('title createdAt').limit(5),
+        
+        // Recent tasks completed
+        Task.find({ 
+          status: 'done',
+          updatedAt: { $gte: twentyFourHoursAgo }
+        }).populate('eventId', 'title').select('title updatedAt eventId').limit(5),
+        
+        // Recent archive links created
+        ArchiveLink.find({ 
+          createdAt: { $gte: twentyFourHoursAgo } 
+        }).populate('eventId', 'title').select('url createdAt eventId').limit(5)
+      ])
+    ]);
+
+    // Process task completion data
+    const [completedTasks, totalTasks] = taskStats;
+    
+    // Process recent activity data
+    const [recentLogins, recentEvents, recentTasksCompleted, recentArchives] = recentActivity;
+    
+    // Combine and format activity logs
     const activities = [];
-
-    // Recent user logins (from today)
-    const recentUsers = await User.find({ 
-      lastLogin: { $gte: twentyFourHoursAgo } 
-    }).select('name email lastLogin').limit(10);
-
-    recentUsers.forEach(user => {
+    
+    recentLogins.forEach(user => {
       activities.push({
         type: 'user_login',
         message: `${user.name} logged in`,
         timestamp: user.lastLogin,
-        userId: user._id,
-        userEmail: user.email
+        userId: user._id
       });
     });
-
-    // Recent events created
-    const recentEvents = await Event.find({ 
-      createdAt: { $gte: twentyFourHoursAgo } 
-    }).select('title createdAt').limit(10);
 
     recentEvents.forEach(event => {
       activities.push({
@@ -322,13 +240,7 @@ router.get('/system/activity', auth, requireRole.requirePermission(PERMISSIONS.S
       });
     });
 
-    // Recent tasks completed
-    const recentTasks = await Task.find({ 
-      status: 'done',
-      updatedAt: { $gte: twentyFourHoursAgo }
-    }).populate('eventId', 'title').select('title updatedAt eventId').limit(10);
-
-    recentTasks.forEach(task => {
+    recentTasksCompleted.forEach(task => {
       activities.push({
         type: 'task_completed',
         message: `Task "${task.title}" completed${task.eventId ? ` for event "${task.eventId.title}"` : ''}`,
@@ -337,102 +249,30 @@ router.get('/system/activity', auth, requireRole.requirePermission(PERMISSIONS.S
       });
     });
 
+    recentArchives.forEach(archive => {
+      activities.push({
+        type: 'archive_created',
+        message: `Archive link added${archive.eventId ? ` for event "${archive.eventId.title}"` : ''}`,
+        timestamp: archive.createdAt,
+        archiveId: archive._id
+      });
+    });
+
     // Sort activities by timestamp (most recent first)
     activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
+    // Return formatted response
     res.json({
-      activities: activities.slice(0, 20), // Limit to 20 most recent
+      totalUsers,
+      activeEvents,
+      taskCompletion: {
+        completed: completedTasks,
+        total: totalTasks,
+        percentage: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+      },
+      totalDriveLinks,
+      recentActivity: activities.slice(0, 10), // Latest 10 activities
       generatedAt: new Date().toISOString()
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// GET /api/admin/system/stats - System statistics
-router.get('/system/stats', auth, requireRole.requirePermission(PERMISSIONS.SYSTEM_ADMIN), async (req, res, next) => {
-  try {
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
-    const [
-      totalStats,
-      recentStats,
-      weekStats,
-      dailyStats,
-      eventStatusStats
-    ] = await Promise.all([
-      // Total counts
-      Promise.all([
-        User.countDocuments(),
-        Event.countDocuments(),
-        Task.countDocuments(),
-        ArchiveLink.countDocuments()
-      ]),
-      
-      // Last 30 days
-      Promise.all([
-        User.countDocuments({ createdAt: { $gte: thirtyDaysAgo } }),
-        Event.countDocuments({ createdAt: { $gte: thirtyDaysAgo } }),
-        Task.countDocuments({ createdAt: { $gte: thirtyDaysAgo } })
-      ]),
-      
-      // Last 7 days
-      Promise.all([
-        User.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
-        Event.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
-        Task.countDocuments({ createdAt: { $gte: sevenDaysAgo } })
-      ]),
-      
-      // Last 24 hours
-      Promise.all([
-        User.countDocuments({ createdAt: { $gte: twentyFourHoursAgo } }),
-        Event.countDocuments({ createdAt: { $gte: twentyFourHoursAgo } }),
-        Task.countDocuments({ createdAt: { $gte: twentyFourHoursAgo } })
-      ]),
-      
-      // Event status breakdown
-      Event.aggregate([
-        { $group: { _id: '$status', count: { $sum: 1 } } }
-      ])
-    ]);
-
-    const [totalUsers, totalEvents, totalTasks, totalArchives] = totalStats;
-    const [newUsers30d, newEvents30d, newTasks30d] = recentStats;
-    const [newUsers7d, newEvents7d, newTasks7d] = weekStats;
-    const [newUsers24h, newEvents24h, newTasks24h] = dailyStats;
-
-    res.json({
-      totals: {
-        users: totalUsers,
-        events: totalEvents,
-        tasks: totalTasks,
-        archives: totalArchives
-      },
-      recent: {
-        last30Days: {
-          users: newUsers30d,
-          events: newEvents30d,
-          tasks: newTasks30d
-        },
-        last7Days: {
-          users: newUsers7d,
-          events: newEvents7d,
-          tasks: newTasks7d
-        },
-        last24Hours: {
-          users: newUsers24h,
-          events: newEvents24h,
-          tasks: newTasks24h
-        }
-      },
-      eventsByStatus: eventStatusStats.reduce((acc, item) => {
-        acc[item._id] = item.count;
-        return acc;
-      }, {}),
-      generatedAt: now.toISOString()
     });
   } catch (err) {
     next(err);

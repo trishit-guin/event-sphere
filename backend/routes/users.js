@@ -12,6 +12,22 @@ const { logger } = require('../utils/logger');
 const { validateRequest } = require('../middleware/validation');
 const { deleteUserWithRelatedData } = require('../utils/transactions');
 
+// GET /api/users/test - Test auth and user retrieval
+router.get('/test', auth, async (req, res) => {
+  try {
+    console.log('Test endpoint - req.user:', req.user);
+    res.json({
+      message: 'Auth test successful',
+      userId: req.user._id,
+      userName: req.user.name,
+      userEmail: req.user.email
+    });
+  } catch (err) {
+    console.error('Test endpoint error:', err);
+    res.status(500).json({ message: 'Test failed', error: err.message });
+  }
+});
+
 /* GET users listing with pagination */
 router.get('/', auth, requireRole.requirePermission(PERMISSIONS.VIEW_USERS), async (req, res, next) => {
   try {
@@ -68,6 +84,94 @@ router.post('/', auth, requireRole.requirePermission(PERMISSIONS.MANAGE_USERS), 
   } catch (err) {
     logger.error('User creation error:', err);
     res.status(500).json({ message: 'Failed to create user. Please try again later.' });
+  }
+});
+
+// PUT /api/users/profile - Update own profile (name, email)
+router.put('/profile', auth, async (req, res) => {
+  const { name, email } = req.body;
+  
+  try {
+    const user = await User.findById(req.user._id);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Validate inputs
+    if (!name || name.trim().length === 0) {
+      return res.status(400).json({ message: 'Name is required' });
+    }
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ message: 'Valid email is required' });
+    }
+
+    // Check if email is being changed and if it's already taken
+    if (email !== user.email) {
+      const existing = await User.findOne({ email });
+      if (existing) {
+        return res.status(400).json({ message: 'Email already in use by another account' });
+      }
+    }
+
+    user.name = name.trim();
+    user.email = email.trim().toLowerCase();
+    
+    await user.save();
+    
+    const updatedUser = user.toObject();
+    delete updatedUser.password;
+    
+    res.json({ 
+      message: 'Profile updated successfully', 
+      user: updatedUser 
+    });
+  } catch (err) {
+    logger.error('Profile update error:', err);
+    res.status(500).json({ 
+      message: 'Failed to update profile. Please try again.'
+    });
+  }
+});
+
+// PUT /api/users/password - Change own password
+router.put('/password', auth, async (req, res) => {
+  const { currentPassword, newPassword, confirmPassword } = req.body;
+  
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Validate inputs
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ message: 'All password fields are required' });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ message: 'New passwords do not match' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'New password must be at least 6 characters long' });
+    }
+
+    // Verify current password
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Current password is incorrect' });
+    }
+
+    // Hash and save new password
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    res.json({ message: 'Password changed successfully' });
+  } catch (err) {
+    logger.error('Password change error:', err);
+    res.status(500).json({ message: 'Failed to change password. Please try again.' });
   }
 });
 
@@ -150,87 +254,6 @@ router.get('/me', auth, async (req, res) => {
   } catch (err) {
     logger.error('Failed to fetch current user:', err);
     res.status(500).json({ message: 'Failed to load your profile. Please refresh the page.' });
-  }
-});
-
-// PUT /api/users/profile - Update own profile (name, email)
-router.put('/profile', auth, async (req, res) => {
-  const { name, email } = req.body;
-  
-  try {
-    const user = await User.findById(req.user._id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    // Validate inputs
-    if (!name || name.trim().length === 0) {
-      return res.status(400).json({ message: 'Name is required' });
-    }
-
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ message: 'Valid email is required' });
-    }
-
-    // Check if email is being changed and if it's already taken
-    if (email !== user.email) {
-      const existing = await User.findOne({ email });
-      if (existing) {
-        return res.status(400).json({ message: 'Email already in use by another account' });
-      }
-    }
-
-    user.name = name.trim();
-    user.email = email.trim().toLowerCase();
-    
-    await user.save();
-    
-    const updatedUser = user.toObject();
-    delete updatedUser.password;
-    
-    res.json({ 
-      message: 'Profile updated successfully', 
-      user: updatedUser 
-    });
-  } catch (err) {
-    logger.error('Profile update error:', err);
-    res.status(500).json({ message: 'Failed to update profile. Please try again.' });
-  }
-});
-
-// PUT /api/users/password - Change own password
-router.put('/password', auth, async (req, res) => {
-  const { currentPassword, newPassword, confirmPassword } = req.body;
-  
-  try {
-    const user = await User.findById(req.user._id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    // Validate inputs
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      return res.status(400).json({ message: 'All password fields are required' });
-    }
-
-    if (newPassword !== confirmPassword) {
-      return res.status(400).json({ message: 'New passwords do not match' });
-    }
-
-    if (newPassword.length < 6) {
-      return res.status(400).json({ message: 'New password must be at least 6 characters long' });
-    }
-
-    // Verify current password
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Current password is incorrect' });
-    }
-
-    // Hash and save new password
-    user.password = await bcrypt.hash(newPassword, 10);
-    await user.save();
-
-    res.json({ message: 'Password changed successfully' });
-  } catch (err) {
-    logger.error('Password change error:', err);
-    res.status(500).json({ message: 'Failed to change password. Please try again.' });
   }
 });
 

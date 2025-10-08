@@ -31,4 +31,9 @@ const eventSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
+// Virtual field to calculate current participants from users array
+eventSchema.virtual('actualParticipants').get(function() {
+  return this.users ? this.users.length : 0;
+});
+
 module.exports = mongoose.model('Event', eventSchema); 
